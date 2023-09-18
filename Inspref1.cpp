@@ -2,6 +2,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ProfileData/SampleProfReader.h"
@@ -84,6 +85,23 @@ namespace {
 			  if (insn2) {
 			    insn2->dump();
 			    errs() << "isLoopInv: " << curLoop->isLoopInvariant(insn2) << "\n";
+			    if (curLoop->isLoopInvariant(insn2)) {
+			      Type *I32 = Type::getInt32Ty((insn2->getParent())->getContext());
+			      Function *PrefetchFunc = Intrinsic::getDeclaration((insn2->getFunction())->getParent(), Intrinsic::prefetch, (insn2->getOperand(0))->getType());
+			      Instruction* gep = dyn_cast<Instruction>(insn2->getOperand(0));
+			      Value* args[] = {
+					       gep,
+					       ConstantInt::get(I32 ,0),
+					       ConstantInt::get(I32 ,3),
+					       ConstantInt::get(I32 ,1)
+			      };
+			      auto aargs = ArrayRef<Value *>(args, 4);
+			      CallInst* call = CallInst::Create(PrefetchFunc, aargs);
+			      call->insertBefore(insn2);
+			      bool changed;
+			      curLoop->makeLoopInvariant(call, changed);
+			      errs() << "insert OK: " << changed << "\n";
+			    }
 			  }
 			}
 		      }

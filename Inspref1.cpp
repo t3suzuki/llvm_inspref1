@@ -9,6 +9,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/Analysis/LoopInfo.h"
 using namespace llvm;
 
 static cl::opt<std::string> fdo_file("input-file", cl::desc("Specify FDO file."), cl::value_desc("filename"));
@@ -23,7 +24,10 @@ namespace {
     static char ID;
     Inspref1Pass() : FunctionPass(ID) {}
 
-    bool doInitialization(Module &M) {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.addRequired<LoopInfoWrapperPass>();
+    }
+    bool doInitialization(Module &M) override {
       if (fdo_file.empty()){
 	errs() << "[Error] input file is not specified!\n";
 	return false;
@@ -43,28 +47,46 @@ namespace {
       return true;
     }
 
-    virtual bool runOnFunction(Function &F) {
-
+    virtual bool runOnFunction(Function &F) override {
       if (Reader) {
 	const llvm::sampleprof::FunctionSamples* read_samples = Reader->getSamplesFor(F);
 	if (read_samples) {
-	  //read_samples->dump();
+	  LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
 	  for (auto &BB : F) {
+	    bool isBBLoop = LI.getLoopFor(&BB);
 	    for (auto &I : BB) {
 	      if (const DILocation *Loc = I.getDebugLoc()){
 		if (const auto *samples = read_samples->findFunctionSamples(Loc)) {
 		  auto ret = samples->findCallTargetMapAt(FunctionSamples::getOffset(Loc),
 							  Loc->getBaseDiscriminator()*2);
 		  if (ret) {
-		    errs() << "---------------------------\n";
-		    samples->dump();
-		    Loc->dump();
-		    I.dump();
-		    errs() << FunctionSamples::getOffset(Loc) << "\n";
-		    errs() << "Base : " << Loc->getBaseDiscriminator() << "\n";
-		    errs() << "\n";
-		    if (LoadInst *curLoad = dyn_cast<LoadInst>(&I)) {
+		    Use* OperandList0 = I.getOperandList();
+		    LoadInst *curLoad = dyn_cast<LoadInst>(&I);
+		    if (!curLoad) {
+		      for (Use* op0 = OperandList0; op0 < OperandList0 + I.getNumOperands(); op0++) {
+			curLoad = dyn_cast<LoadInst>(op0->get());
+			if (curLoad)
+			  break;
+		      }
+		    }
+
+		    if (curLoad) {
+		      errs() << "curLoad : ";
 		      curLoad->dump();
+		      Use* OperandList = curLoad->getOperandList();
+		      Loop* curLoop = LI.getLoopFor(curLoad->getParent());
+		      for (Use* op = OperandList; op < OperandList + curLoad->getNumOperands(); op++) {
+			Instruction* insn = dyn_cast<Instruction>(op->get());
+			insn->dump();
+			Use* OperandList2 = insn->getOperandList();
+			for (Use* op2 = OperandList2; op2 < OperandList2 + insn->getNumOperands(); op2++) {
+			  Instruction* insn2 = dyn_cast<Instruction>(op2->get());
+			  if (insn2) {
+			    insn2->dump();
+			    errs() << "isLoopInv: " << curLoop->isLoopInvariant(insn2) << "\n";
+			  }
+			}
+		      }
 		    }
 		  }
 		}

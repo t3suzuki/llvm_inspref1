@@ -3,6 +3,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ProfileData/SampleProfReader.h"
@@ -11,6 +12,8 @@
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/ADT/SetVector.h"
+
 using namespace llvm;
 
 static cl::opt<std::string> fdo_file("input-file", cl::desc("Specify FDO file."), cl::value_desc("filename"));
@@ -48,6 +51,49 @@ namespace {
       return true;
     }
 
+
+    Instruction* GetIncomingValue(Loop* L, llvm::Instruction* curPN) {  
+      BasicBlock *H = L->getHeader();
+      BasicBlock *Backedge = nullptr;
+      pred_iterator PI = pred_begin(H);
+      Backedge = *PI++;
+
+      for (BasicBlock::iterator I = H->begin(); isa<PHINode>(I); ++I) {
+	PHINode *PN = cast<PHINode>(I);
+	if (PN == curPN) {
+	  if (Instruction *IncomingInstr = dyn_cast<Instruction>(PN->getIncomingValueForBlock(Backedge))){
+	    return IncomingInstr;
+	  }
+	}
+      }
+      return nullptr;
+    }
+
+
+    CmpInst* getCompareInstrGetElememntPtr(Loop* L, Instruction* nextInd){
+      SetVector<Instruction*> BBInsts;
+      auto B = L->getExitingBlock();
+      int count = 0;
+      
+      if (!B)
+	return nullptr;
+      for (Instruction &J : *B) {
+	Instruction* I = &J;
+	BBInsts.insert(I);
+	count++;
+      }
+      for (int i= BBInsts.size()-1; i>=0; i--) {
+	CmpInst *CI = dyn_cast<CmpInst>(BBInsts[i]);
+	if (CI &&
+	    (CI->getOperand(0) == nextInd || CI->getOperand(1) == nextInd) &&
+	    nextInd->getOpcode() == Instruction::GetElementPtr){
+	  return CI;
+	}
+      }
+      
+      return nullptr;
+    }
+    
     virtual bool runOnFunction(Function &F) override {
       if (Reader) {
 	const llvm::sampleprof::FunctionSamples* read_samples = Reader->getSamplesFor(F);
@@ -74,11 +120,18 @@ namespace {
 		    if (curLoad) {
 		      errs() << "curLoad : ";
 		      curLoad->dump();
+		      PHINode *phi = nullptr;
 		      Use* OperandList = curLoad->getOperandList();
 		      Loop* curLoop = LI.getLoopFor(curLoad->getParent());
 		      for (Use* op = OperandList; op < OperandList + curLoad->getNumOperands(); op++) {
 			Instruction* insn = dyn_cast<Instruction>(op->get());
+			errs() << "dep_insn : ";
 			insn->dump();
+			if (dyn_cast<PHINode>(insn)) {
+			  phi = dyn_cast<PHINode>(insn);
+			}
+
+			
 			Use* OperandList2 = insn->getOperandList();
 			for (Use* op2 = OperandList2; op2 < OperandList2 + insn->getNumOperands(); op2++) {
 			  Instruction* insn2 = dyn_cast<Instruction>(op2->get());
@@ -86,9 +139,9 @@ namespace {
 			    insn2->dump();
 			    errs() << "isLoopInv: " << curLoop->isLoopInvariant(insn2) << "\n";
 			    if (curLoop->isLoopInvariant(insn2)) {
-			      Type *I32 = Type::getInt32Ty((insn2->getParent())->getContext());
-			      Function *PrefetchFunc = Intrinsic::getDeclaration((insn2->getFunction())->getParent(), Intrinsic::prefetch, (insn2->getOperand(0))->getType());
-			      Instruction* gep = dyn_cast<Instruction>(insn2->getOperand(0));
+			      Type *I32 = Type::getInt32Ty(F.getContext());
+			      Function *PrefetchFunc = Intrinsic::getDeclaration((curLoad->getFunction())->getParent(), Intrinsic::prefetch, (curLoad->getOperand(0))->getType());
+			      Instruction* gep = dyn_cast<Instruction>(curLoad->getOperand(0));
 			      Value* args[] = {
 					       gep,
 					       ConstantInt::get(I32 ,0),
@@ -96,10 +149,30 @@ namespace {
 					       ConstantInt::get(I32 ,1)
 			      };
 			      auto aargs = ArrayRef<Value *>(args, 4);
-			      CallInst* call = CallInst::Create(PrefetchFunc, aargs);
-			      call->insertBefore(insn2);
+			      CallInst* pref_call = CallInst::Create(PrefetchFunc, aargs);
+			      pref_call->insertBefore(curLoad);
+
+			      if (phi) {
+				Instruction* IncInstr = GetIncomingValue(curLoop, phi);
+				errs() << "IncInsn : ";
+				IncInstr->dump();
+				if (IncInstr->getOpcode() == Instruction::GetElementPtr && IncInstr->getOperand(0) == phi){
+				  CmpInst* compareInstr = getCompareInstrGetElememntPtr(curLoop, IncInstr);
+				  errs() << "CmpInsn : ";
+				  compareInstr->dump();
+
+				  IRBuilder<> builder(curLoad);
+				  Value *i = builder.CreateAlloca(I32, nullptr, "i");
+				  builder.CreateStore(ConstantInt::get(I32, 0), i);
+				  /*
+				  BasicBlock *loop_cond = BasicBlock::Create(F.getContext(), "myloop.boy", &F);
+				  */
+				  
+				}
+			      }
+			      
 			      bool changed;
-			      curLoop->makeLoopInvariant(call, changed);
+			      curLoop->makeLoopInvariant(pref_call, changed);
 			      errs() << "insert OK: " << changed << "\n";
 			    }
 			  }

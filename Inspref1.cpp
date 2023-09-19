@@ -147,16 +147,6 @@ namespace {
 			      Type *I32 = Type::getInt32Ty(F.getContext());
 			      Type *I64 = Type::getInt64Ty(F.getContext());
 			      Function *PrefetchFunc = Intrinsic::getDeclaration((curLoad->getFunction())->getParent(), Intrinsic::prefetch, (curLoad->getOperand(0))->getType());
-			      Instruction* gep = dyn_cast<Instruction>(curLoad->getOperand(0));
-			      Value* args[] = {
-					       gep,
-					       ConstantInt::get(I32 ,0),
-					       ConstantInt::get(I32 ,3),
-					       ConstantInt::get(I32 ,1)
-			      };
-			      auto aargs = ArrayRef<Value *>(args, 4);
-			      CallInst* pref_call = CallInst::Create(PrefetchFunc, aargs);
-			      pref_call->insertBefore(curLoad);
 
 			      if (phi) {
 				Instruction* IncInstr = GetIncomingValue(curLoop, phi);
@@ -168,45 +158,21 @@ namespace {
 				  compareInstr->dump();
 
 				  IRBuilder<> builder(curLoad);
-				  Value *i = builder.CreateAlloca(PointerType::getUnqual(I32), nullptr, "i");
-				  //builder.CreateStore(ConstantInt::get(I32, 0), i);
-				  //builder.CreateStore(OtherInstr, i);
-				  //Instruction* gep2 = dyn_cast<Instruction>(curLoad->getOperand(0));
-				  Value* args2[] = {
-						    OtherInstr,
-						    ConstantInt::get(I32 ,0),
-						    ConstantInt::get(I32 ,3),
-						    ConstantInt::get(I32 ,1)
-				  };
-				  auto aargs2 = ArrayRef<Value *>(args2, 4);
-				  builder.CreateCall(PrefetchFunc, aargs2);
-
-				  //Value *l3 = builder.CreateLoad(PointerType::getUnqual(I32), i, "i_loaded");
-				  //Value *added = builder.CreateGEP(I32, l3, ConstantInt::get(I32 ,4), "added");
-				  Value *added = builder.CreateGEP(I32, OtherInstr, ConstantInt::get(I32 ,4), "added");
-				  Value* args3[] = {
-						    added,
-						    ConstantInt::get(I32 ,0),
-						    ConstantInt::get(I32 ,3),
-						    ConstantInt::get(I32 ,1)
-				  };
-				  auto aargs3 = ArrayRef<Value *>(args3, 4);
-				  builder.CreateCall(PrefetchFunc, aargs3);
-
-				  //builder.Insert(pref_call);
-				  
-				  //BasicBlock *loop_cond = BasicBlock::Create(F.getContext(), "myloop.cond", &F);
-				  //BasicBlock *loop_body = BasicBlock::Create(F.getContext(), "myloop.body", &F);
-				  //BasicBlock *loop_end = BasicBlock::Create(F.getContext(), "myloop.end", &F);
-				  //builder.CreateBr(loop_cond);
-				  //builder.SetInsertPoint(loop_cond);
-				  
+				  for (int i=0; i<2; i++) {
+				    Value *added = builder.CreateGEP(I32, OtherInstr, ConstantInt::get(I32 ,i*4), "added");
+				    //curLoop->makeLoopInvariant(added, changed);
+				    Value* args3[] = {
+						      added,
+						      ConstantInt::get(I32 ,0),
+						      ConstantInt::get(I32 ,3),
+						      ConstantInt::get(I32 ,1)
+				    };
+				    auto aargs3 = ArrayRef<Value *>(args3, 4);
+				    Value *pref = builder.CreateCall(PrefetchFunc, aargs3);
+				    //curLoop->makeLoopInvariant(pref, changed);
+				  }
 				}
 			      }
-			      
-			      bool changed;
-			      curLoop->makeLoopInvariant(pref_call, changed);
-			      errs() << "insert OK: " << changed << "\n";
 			    }
 			  }
 			}

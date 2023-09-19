@@ -149,6 +149,7 @@ namespace {
 			      Function *PrefetchFunc = Intrinsic::getDeclaration((curLoad->getFunction())->getParent(), Intrinsic::prefetch, (curLoad->getOperand(0))->getType());
 
 			      if (phi) {
+				OtherInstr = nullptr;
 				Instruction* IncInstr = GetIncomingValue(curLoop, phi);
 				errs() << "IncInsn : ";
 				IncInstr->dump();
@@ -157,19 +158,19 @@ namespace {
 				  errs() << "CmpInsn : ";
 				  compareInstr->dump();
 
-				  IRBuilder<> builder(curLoad);
-				  for (int i=0; i<2; i++) {
-				    Value *added = builder.CreateGEP(I32, OtherInstr, ConstantInt::get(I32 ,i*4), "added");
-				    //curLoop->makeLoopInvariant(added, changed);
-				    Value* args3[] = {
-						      added,
-						      ConstantInt::get(I32 ,0),
-						      ConstantInt::get(I32 ,3),
-						      ConstantInt::get(I32 ,1)
-				    };
-				    auto aargs3 = ArrayRef<Value *>(args3, 4);
-				    Value *pref = builder.CreateCall(PrefetchFunc, aargs3);
-				    //curLoop->makeLoopInvariant(pref, changed);
+				  if (OtherInstr) {
+				    IRBuilder<> builder(OtherInstr->getNextNonDebugInstruction());
+				    for (int i=0; i<3; i++) {
+				      Value *added = builder.CreateGEP(I32, OtherInstr, ConstantInt::get(I32 ,i*4), "added");
+				      Value* args3[] = {
+							added,
+							ConstantInt::get(I32 ,0),
+							ConstantInt::get(I32 ,3),
+							ConstantInt::get(I32 ,1)
+				      };
+				      auto aargs3 = ArrayRef<Value *>(args3, 4);
+				      Value *pref = builder.CreateCall(PrefetchFunc, aargs3);
+				    }
 				  }
 				}
 			      }

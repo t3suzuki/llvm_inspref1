@@ -170,7 +170,7 @@ namespace {
 				  IRBuilder<> builder(curLoad);
 				  Value *i = builder.CreateAlloca(PointerType::getUnqual(I32), nullptr, "i");
 				  //builder.CreateStore(ConstantInt::get(I32, 0), i);
-				  builder.CreateStore(OtherInstr, i);
+				  //builder.CreateStore(OtherInstr, i);
 				  //Instruction* gep2 = dyn_cast<Instruction>(curLoad->getOperand(0));
 				  Value* args2[] = {
 						    OtherInstr,
@@ -181,9 +181,9 @@ namespace {
 				  auto aargs2 = ArrayRef<Value *>(args2, 4);
 				  builder.CreateCall(PrefetchFunc, aargs2);
 
-				  //auto l3 = builder.CreateLoad(PointerType::getUnqual(I32), i, "i_loaded");
-				  Value *l3 = builder.CreateLoad(PointerType::getUnqual(I32), i, "i_loaded");
-				  Value *added = builder.CreateGEP(I32, l3, ConstantInt::get(I32 ,4), "added");
+				  //Value *l3 = builder.CreateLoad(PointerType::getUnqual(I32), i, "i_loaded");
+				  //Value *added = builder.CreateGEP(I32, l3, ConstantInt::get(I32 ,4), "added");
+				  Value *added = builder.CreateGEP(I32, OtherInstr, ConstantInt::get(I32 ,4), "added");
 				  Value* args3[] = {
 						    added,
 						    ConstantInt::get(I32 ,0),

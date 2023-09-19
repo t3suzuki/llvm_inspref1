@@ -27,7 +27,8 @@ namespace {
   public:
     static char ID;
     Inspref1Pass() : FunctionPass(ID) {}
-
+    Instruction *OtherInstr;
+    
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.addRequired<LoopInfoWrapperPass>();
     }
@@ -62,6 +63,10 @@ namespace {
 	PHINode *PN = cast<PHINode>(I);
 	if (PN == curPN) {
 	  if (Instruction *IncomingInstr = dyn_cast<Instruction>(PN->getIncomingValueForBlock(Backedge))){
+	    if (OtherInstr = dyn_cast<Instruction>(PN->getIncomingValueForBlock(*PI++))){
+	      errs() << "other: ";
+	      OtherInstr->dump();
+	    }
 	    return IncomingInstr;
 	  }
 	}
@@ -162,11 +167,36 @@ namespace {
 				  compareInstr->dump();
 
 				  IRBuilder<> builder(curLoad);
-				  Value *i = builder.CreateAlloca(I32, nullptr, "i");
-				  builder.CreateStore(ConstantInt::get(I32, 0), i);
+				  //Value *i = builder.CreateAlloca(I32, nullptr, "i");
+				  //builder.CreateStore(ConstantInt::get(I32, 0), i);
+				  //builder.CreateStore(OtherInstr, i);
+				  //Instruction* gep2 = dyn_cast<Instruction>(curLoad->getOperand(0));
+				  Value* args2[] = {
+						    OtherInstr,
+						    ConstantInt::get(I32 ,0),
+						    ConstantInt::get(I32 ,3),
+						    ConstantInt::get(I32 ,1)
+				  };
+				  auto aargs2 = ArrayRef<Value *>(args2, 4);
+				  builder.CreateCall(PrefetchFunc, aargs2);
 				  /*
-				  BasicBlock *loop_cond = BasicBlock::Create(F.getContext(), "myloop.boy", &F);
+				  Value *added = builder.CreateAdd(OtherInstr, ConstantInt::get(I32 ,4));
+				  Value* args3[] = {
+						    added,
+						    ConstantInt::get(I32 ,0),
+						    ConstantInt::get(I32 ,3),
+						    ConstantInt::get(I32 ,1)
+				  };
+				  auto aargs3 = ArrayRef<Value *>(args3, 4);
+				  builder.CreateCall(PrefetchFunc, aargs3);
 				  */
+				  //builder.Insert(pref_call);
+				  
+				  //BasicBlock *loop_cond = BasicBlock::Create(F.getContext(), "myloop.cond", &F);
+				  //BasicBlock *loop_body = BasicBlock::Create(F.getContext(), "myloop.body", &F);
+				  //BasicBlock *loop_end = BasicBlock::Create(F.getContext(), "myloop.end", &F);
+				  //builder.CreateBr(loop_cond);
+				  //builder.SetInsertPoint(loop_cond);
 				  
 				}
 			      }

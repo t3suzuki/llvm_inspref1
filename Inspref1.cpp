@@ -124,7 +124,6 @@ namespace {
 		      Instruction* insn2 = dyn_cast<Instruction>(op2->get());
 		      if (insn2) {
 			insn2->dump();
-			errs() << "isLoopInv: " << curLoop->isLoopInvariant(insn2) << "\n";
 			if (curLoop->isLoopInvariant(insn2)) {
 			  Type *I32 = Type::getInt32Ty(F.getContext());
 			  Type *I64 = Type::getInt64Ty(F.getContext());
@@ -141,9 +140,9 @@ namespace {
 			      compareInstr->dump();
 
 			      if (OtherInstr) {
-				IRBuilder<> builder(OtherInstr->getNextNonDebugInstruction());
+				IRBuilder<> builder(OtherInstr->getNextNode());
 				/*
-				  BasicBlock *prefBB = BasicBlock::Create(F.getContext(), "prefBB", &F);
+				BasicBlock *prefBB = BasicBlock::Create(F.getContext(), "prefBB", &F);
 				  BasicBlock *exitBB = BasicBlock::Create(F.getContext(), "exitBB", &F);
 				  builder.SetInsertPoint(prefBB);
 				*/
